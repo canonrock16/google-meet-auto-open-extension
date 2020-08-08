@@ -1,0 +1,11 @@
+{
+  "name": "Google Meet Auto Open",
+  "version": "1.0",
+  "description": "Extension for chrome to open google meet automatically just before meeting start time.",
+  "permissions": ["tabs", "alarms", "storage"],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+  "manifest_version": 1.0
+}

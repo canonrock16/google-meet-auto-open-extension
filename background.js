@@ -1,3 +1,4 @@
+const beforeMeetingMinutes = 5;
 function createCheckAlarm() {
     chrome.alarms.create('check', {
         delayInMinutes: 0.1,
@@ -52,17 +53,15 @@ function checkMeeting() {
             .then((response) => response.json()) // Transform the data into json
             .then(function (data) {
                 current = new Date().getTime();
-                //TODO 設定した値分前にアラームをセットする
-                //設定した時間を既に過ぎていたらすぐに立ち上がる
                 for (let i in data.items) {
-                    start = Date.parse(data.items[i]['start']['dateTime']);
-                    //今日の現在時刻以降開始のmeetingのみセットする
-                    if (start > current) {
+                    //set alarm for only meetings staring in future.
+                    openTabTime = Date.parse(data.items[i]['start']['dateTime']) - beforeMeetingMinutes * 60 * 1000;
+                    if (openTabTime > current) {
                         // Create meeting alerms
                         chrome.alarms.create(data.items[i]['hangoutLink'], {
-                            when: Date.parse(data.items[i]['start']['dateTime']),
+                            when: openTabTime,
                         });
-                        console.log('set meeting at' + data.items[i]['start']['dateTime'])
+                        console.log('set meeting at' + openTabTime)
                     }
                 }
             })

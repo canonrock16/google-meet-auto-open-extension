@@ -1,4 +1,6 @@
 const beforeMeetingMinutes = 5;
+
+//set check alarm every 30 minutes.
 function createCheckAlarm() {
     chrome.alarms.create('check', {
         delayInMinutes: 0.1,
@@ -6,6 +8,7 @@ function createCheckAlarm() {
     });
 }
 
+//dealing with when meeting deleted.
 function clearAllMeetingAlarm() {
     console.log('clear start!')
     return new Promise((resolve, reject) => {
@@ -70,12 +73,11 @@ function checkMeeting() {
 //execute when installed or updated
 chrome.runtime.onInstalled.addListener(function () {
     chrome.alarms.clearAll();
-    //初回は1分後。その後はチェックアラームを30分おきにセット
     console.log('start up!');
     createCheckAlarm();
 });
 
-//何かの拍子にcheckアラームが消えていたら再セット
+//set alarm again if check alarm vanished(maybe unnecessary)
 chrome.tabs.onCreated.addListener(function () {
     chrome.alarms.getAll(
         function (alarms) {

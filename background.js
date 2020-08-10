@@ -1,5 +1,11 @@
 const beforeMeetingMinutes = 5;
-let retryCount = 5;
+
+const scope = "https://www.googleapis.com/auth/calendar.readonly";
+//webアプリ用その2
+const client_id = "799068841757-bk7a050dhbr30uihso94q19kq38m3sts.apps.googleusercontent.com";
+const client_secret = "KKA39Gu15tGPgx88D3846tZY";
+
+let retryCount = 3;
 
 //set check alarm every 30 minutes.
 function createCheckAlarm() {
@@ -9,10 +15,44 @@ function createCheckAlarm() {
     });
 }
 
+function getTimeParam() {
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth() + 1;
+    let date = now.getDate();
+    month = ('0' + month).slice(-2);
+    date = ('0' + date).slice(-2);
+    const params = {
+        timeMin: year + '-' + month + '-' + date + 'T00:00:00.000+09:00',
+        timeMax: year + '-' + month + '-' + date + 'T23:59:59.000+09:00'
+    };
+    return params
+}
+function getEndOfToday() {
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth() + 1;
+    let date = now.getDate();
+    month = ('0' + month).slice(-2);
+    date = ('0' + date).slice(-2);
+    return Date.parse(year + '-' + month + '-' + date + 'T23:59:59.000+09:00')
+}
+
+// POSTする際にObjectをクエリー化するだけ
+function paramsToQueryString(params) {
+    var queryStrings = [];
+    for (var key in params) {
+        var value = params[key];
+        queryStrings.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
+    }
+
+    return queryStrings.join('&');
+}
+
 //dealing with when meeting deleted.
 function clearAllMeetingAlarm() {
-    console.log('clear start!')
     return new Promise((resolve, reject) => {
+        console.log('clear start!')
         chrome.alarms.getAll(
             function (alarms) {
                 for (let alarm in alarms) {
@@ -24,75 +64,108 @@ function clearAllMeetingAlarm() {
         )
     })
 }
-function getTimeParam() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    const date = now.getDate();
-    const params = {
-        timeMin: year + '-' + month + '-' + date + 'T00:00:00.000+09:00',
-        timeMax: year + '-' + month + '-' + date + 'T23:59:59.000+09:00'
-    };
-    return params
-}
 
-function checkMeeting() {
-    console.log('check start!')
-    //TODO トークン永続化
-    chrome.identity.getAuthToken({ 'interactive': false }, function (token) {
-        // console.log(token);
-        let init = {
-            method: 'GET',
-            async: true,
-            headers: {
-                Authorization: 'Bearer ' + token,
-                'Content-Type': 'application/json'
-            },
-            'contentType': 'json'
+function getToken() {
+    return new Promise((resolve, reject) => {
+        console.log('auth start!')
+        let authURL = 'https://accounts.google.com/o/oauth2/v2/auth';
+        const redirectURL = chrome.identity.getRedirectURL("oauth2");
+        let auth_params = {
+            client_id: client_id,
+            // redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
+            redirect_uri: redirectURL,
+            response_type: 'code',
+            access_type: 'offline',
+            scope: scope,
         };
-        params = getTimeParam();
-        const queryString = Object.keys(params).map(name => `${name}=${encodeURIComponent(params[name])}`).join('&');
-
-        fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?' + queryString, init)
-            .then((response) => {
-                if (response.ok) {
-                    return response.json()
+        auth_params = '?' + Object.entries(auth_params).map((e) => `${e[0]}=${e[1]}`).join('&');
+        chrome.identity.launchWebAuthFlow({ url: authURL + auth_params, interactive: true }, (responseURL) => {
+            console.log(responseURL);
+            // ログイン許可を出すと画面に認証コードが出るのでそれを入力させる
+            // let code = prompt("please input authorization code");
+            let code = new URL(responseURL).searchParams.get("code");
+            let params = {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirectURL,
+                // "redirect_uri": "urn:ietf:wg:oauth:2.0:oob"
+            };
+            // 入力した認証コードを使用してアクセストークンを取得
+            fetch("https://www.googleapis.com/oauth2/v3/token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: paramsToQueryString(params)
+            }).then(function (res) {
+                if (res.status != 200) {
+                    throw new Error("failed retrieve oauth token");
                 }
-                // else if (retryCount > 0) {
-                // 404 や 500 ステータスならここに到達する
-                throw new Error('Network response was not ok.');
-                // }
-            }) // Transform the data into json
-            .then(function (data) {
-                current = new Date().getTime();
-                for (let i in data.items) {
-                    //set alarm for only meetings staring in future.
-                    openTabTime = Date.parse(data.items[i]['start']['dateTime']) - beforeMeetingMinutes * 60 * 1000;
-                    if (openTabTime > current) {
-                        // Create meeting alerms
-                        chrome.alarms.create(data.items[i]['hangoutLink'], {
-                            when: openTabTime,
-                        });
-                        console.log('set meeting at' + openTabTime)
-                    }
-                }
-            })
-            .catch(error => {
-                // ネットワークエラーの場合はここに到達する
-                console.error(error);
-                // console.log('retry!');
-                // This status may indicate that the cached
-                // access token was invalid. Retry once with
-                // a fresh token.
-                // retryCount--;
-                // chrome.identity.removeCachedAuthToken(
-                // { 'token': token },
-                // checkMeeting);
-                // return;
-            })
-
+                return res.json();//return json if res=OK
+            }).then(function (data) {
+                console.log('access_token:' + data.access_token);
+                // console.log('refresh_token:' + data.refresh_token);
+                resolve(data.access_token);
+            }).catch(function (error) {
+                console.log(error);
+            });
+        })
     })
 }
+
+function checkMeeting(token) {
+    console.log('check start!')
+    console.log('token:' + token);
+    let init = {
+        method: 'GET',
+        async: true,
+        headers: {
+            Authorization: 'Bearer ' + token,
+            'Content-Type': 'application/json'
+        },
+        'contentType': 'json'
+    };
+    params = getTimeParam();
+    const queryString = Object.keys(params).map(name => `${name}=${encodeURIComponent(params[name])}`).join('&');
+
+    fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?' + queryString, init)
+        .then((response) => {
+            if (response.ok) {
+                return response.json()// Transform the data into json
+            }
+            //if not OK
+            throw new Error(response);
+        })
+        .then(function (data) {
+            current = new Date().getTime();
+            today_end = getEndOfToday();
+            for (let i in data.items) {
+                //set alarm for only meetings staring the rest of today.
+                openTabTime = Date.parse(data.items[i]['start']['dateTime']) - beforeMeetingMinutes * 60 * 1000;
+                if (openTabTime > current && openTabTime <= today_end) {
+                    // Create meeting alerms
+                    chrome.alarms.create(data.items[i]['hangoutLink'], {
+                        when: openTabTime,
+                    });
+                    console.log('set meeting ' + data.items[i]['summary'])
+                }
+            }
+        })
+        .catch(error => {
+            // This status may indicate that the cached access token was invalid. Retry once with a fresh token.
+            console.error('cannot get plans...');
+            console.error(error);
+            retryCount--;
+            if (retryCount > 0) {
+                console.log('retry!');
+                clearAllMeetingAlarm().then(getToken().then((token) => checkMeeting(token)));
+            }
+        })
+
+}
+
 //execute when installed or updated
 chrome.runtime.onInstalled.addListener(function () {
     chrome.alarms.clearAll();
@@ -118,10 +191,11 @@ chrome.tabs.onCreated.addListener(function () {
 chrome.alarms.onAlarm.addListener(function (alarm) {
     if (alarm.name === 'check') {
         console.log('check!')
-        clearAllMeetingAlarm().then(checkMeeting());
+        clearAllMeetingAlarm().then(getToken().then((token) => checkMeeting(token)));
+        retryCount = 3;//reset retry count.
     } else {
         //when alarm is for meeting
-        console.log(alarm.name)
-        // chrome.tabs.create({ url: alarm.name });
+        chrome.tabs.create({ url: alarm.name });
+        // console.log(alarm.name)
     }
 });

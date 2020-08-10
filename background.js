@@ -1,6 +1,8 @@
 const beforeMeetingMinutes = 5;
+const file = 'client_secret.json';
 
 const scope = "https://www.googleapis.com/auth/calendar.readonly";
+let inhibit_words = ['test', 'オンライン部室'];
 
 let client_id;
 let client_secret;
@@ -11,12 +13,11 @@ let retryCount = 3;
 function createCheckAlarm() {
     chrome.alarms.create('check', {
         delayInMinutes: 0.1,
-        periodInMinutes: 0.1,
+        periodInMinutes: beforeMeetingMinutes,
     });
 }
 
 function getCredentialInfo() {
-    const file = 'client_secret.json';
     const url = chrome.runtime.getURL(file);
     fetch(url)
         .then((response) => response.json()) //assuming file contains json
@@ -94,7 +95,6 @@ function getToken() {
                 "redirect_uri": redirectURL,
                 // "redirect_uri": "urn:ietf:wg:oauth:2.0:oob"
             };
-            console.log(paramsToQueryString(params));
             // 入力した認証コードを使用してアクセストークンを取得
             fetch("https://www.googleapis.com/oauth2/v3/token", {
                 method: "POST",
@@ -145,6 +145,17 @@ function checkMeeting(token) {
             current = new Date().getTime();
             today_end = getEndOfToday();
             for (let i in data.items) {
+                //don't set meeting plan if it's title contains inhibit words.
+                inhibit_flg = false;
+                for (let word of inhibit_words) {
+                    if (data.items[i]['summary'].includes(word)) {
+                        inhibit_flg = true;
+                    }
+                }
+                if (inhibit_flg) {
+                    continue;
+                }
+
                 //set alarm for only meetings staring the rest of today.
                 openTabTime = Date.parse(data.items[i]['start']['dateTime']) - beforeMeetingMinutes * 60 * 1000;
                 if (openTabTime > current && openTabTime <= today_end) {

@@ -1,4 +1,5 @@
 const beforeMeetingMinutes = 5;
+let retryCount = 5;
 
 //set check alarm every 30 minutes.
 function createCheckAlarm() {
@@ -38,7 +39,7 @@ function getTimeParam() {
 function checkMeeting() {
     console.log('check start!')
     //TODO トークン永続化
-    chrome.identity.getAuthToken({ 'interactive': true }, function (token) {
+    chrome.identity.getAuthToken({ 'interactive': false }, function (token) {
         // console.log(token);
         let init = {
             method: 'GET',
@@ -53,7 +54,15 @@ function checkMeeting() {
         const queryString = Object.keys(params).map(name => `${name}=${encodeURIComponent(params[name])}`).join('&');
 
         fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?' + queryString, init)
-            .then((response) => response.json()) // Transform the data into json
+            .then((response) => {
+                if (response.ok) {
+                    return response.json()
+                }
+                // else if (retryCount > 0) {
+                // 404 や 500 ステータスならここに到達する
+                throw new Error('Network response was not ok.');
+                // }
+            }) // Transform the data into json
             .then(function (data) {
                 current = new Date().getTime();
                 for (let i in data.items) {
@@ -68,6 +77,20 @@ function checkMeeting() {
                     }
                 }
             })
+            .catch(error => {
+                // ネットワークエラーの場合はここに到達する
+                console.error(error);
+                // console.log('retry!');
+                // This status may indicate that the cached
+                // access token was invalid. Retry once with
+                // a fresh token.
+                // retryCount--;
+                // chrome.identity.removeCachedAuthToken(
+                // { 'token': token },
+                // checkMeeting);
+                // return;
+            })
+
     })
 }
 //execute when installed or updated

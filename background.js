@@ -1,9 +1,9 @@
 const beforeMeetingMinutes = 5;
 
 const scope = "https://www.googleapis.com/auth/calendar.readonly";
-//webアプリ用その2
-const client_id = "799068841757-bk7a050dhbr30uihso94q19kq38m3sts.apps.googleusercontent.com";
-const client_secret = "KKA39Gu15tGPgx88D3846tZY";
+
+let client_id;
+let client_secret;
 
 let retryCount = 3;
 
@@ -13,6 +13,17 @@ function createCheckAlarm() {
         delayInMinutes: 0.1,
         periodInMinutes: 0.1,
     });
+}
+
+function getCredentialInfo() {
+    const file = 'client_secret.json';
+    const url = chrome.runtime.getURL(file);
+    fetch(url)
+        .then((response) => response.json()) //assuming file contains json
+        .then((json) => {
+            client_id = json['web']['client_id'];
+            client_secret = json['web']['client_secret'];
+        });
 }
 
 function getTimeParam() {
@@ -163,6 +174,7 @@ chrome.runtime.onInstalled.addListener(function () {
     chrome.alarms.clearAll();
     console.log('start up!');
     createCheckAlarm();
+    getCredentialInfo();
 });
 
 //set alarm again if check alarm vanished(maybe unnecessary)
@@ -183,6 +195,7 @@ chrome.tabs.onCreated.addListener(function () {
 chrome.alarms.onAlarm.addListener(function (alarm) {
     if (alarm.name === 'check') {
         console.log('check!')
+        getCredentialInfo();
         clearAllMeetingAlarm().then(getToken().then((token) => checkMeeting(token)));
         retryCount = 3;//reset retry count.
     } else {

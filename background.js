@@ -2,7 +2,7 @@ const beforeMeetingMinutes = 5;
 const file = 'client_secret.json';
 
 const scope = "https://www.googleapis.com/auth/calendar.readonly";
-let inhibit_words = ['test', 'オンライン部室'];
+let inhibit_words = ['オンライン部室'];
 
 let client_id;
 let client_secret;
@@ -12,7 +12,7 @@ let retryCount = 3;
 //set check alarm every 30 minutes.
 function createCheckAlarm() {
     chrome.alarms.create('check', {
-        delayInMinutes: 0.1,
+        delayInMinutes: 1,
         periodInMinutes: beforeMeetingMinutes,
     });
 }
@@ -58,7 +58,6 @@ function paramsToQueryString(params) {
 //dealing with when meeting deleted.
 function clearAllMeetingAlarm() {
     return new Promise((resolve, reject) => {
-        console.log('clear start!')
         chrome.alarms.getAll(
             function (alarms) {
                 for (let alarm in alarms) {
@@ -73,7 +72,6 @@ function clearAllMeetingAlarm() {
 
 function getToken() {
     return new Promise((resolve, reject) => {
-        console.log('auth start!')
         const redirectURL = chrome.identity.getRedirectURL("oauth2");
 
         let authURL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -108,19 +106,15 @@ function getToken() {
                 }
                 return res.json();//return json if res=OK
             }).then(function (data) {
-                console.log('access_token:' + data.access_token);
-                // console.log('refresh_token:' + data.refresh_token);
                 resolve(data.access_token);
             }).catch(function (error) {
-                console.log(error);
+                console.error(error);
             });
         })
     })
 }
 
 function checkMeeting(token) {
-    console.log('check start!')
-    console.log('token:' + token);
     let init = {
         method: 'GET',
         async: true,
@@ -163,7 +157,6 @@ function checkMeeting(token) {
                     chrome.alarms.create(data.items[i]['hangoutLink'], {
                         when: openTabTime,
                     });
-                    console.log('set meeting ' + data.items[i]['summary'])
                 }
             }
         })
@@ -193,10 +186,8 @@ chrome.tabs.onCreated.addListener(function () {
     chrome.alarms.getAll(
         function (alarms) {
             if (!alarms.some(item => item.name === 'check')) {
-                console.log('vanished!');
                 createCheckAlarm();
             } else {
-                console.log('not vanished!');
             }
         }
     )
@@ -205,13 +196,12 @@ chrome.tabs.onCreated.addListener(function () {
 // Listen alarms
 chrome.alarms.onAlarm.addListener(function (alarm) {
     if (alarm.name === 'check') {
-        console.log('check!')
         getCredentialInfo();
         clearAllMeetingAlarm().then(getToken().then((token) => checkMeeting(token)));
         retryCount = 3;//reset retry count.
     } else {
         //when alarm is for meeting
         chrome.tabs.create({ url: alarm.name });
-        // console.log(alarm.name)
+        console.log(alarm.name)
     }
 });

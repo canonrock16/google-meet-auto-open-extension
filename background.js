@@ -28,6 +28,7 @@ function getTimeParam() {
     };
     return params
 }
+
 function getEndOfToday() {
     const now = new Date();
     let year = now.getFullYear();
@@ -38,15 +39,8 @@ function getEndOfToday() {
     return Date.parse(year + '-' + month + '-' + date + 'T23:59:59.000+09:00')
 }
 
-// POSTする際にObjectをクエリー化するだけ
 function paramsToQueryString(params) {
-    var queryStrings = [];
-    for (var key in params) {
-        var value = params[key];
-        queryStrings.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
-    }
-
-    return queryStrings.join('&');
+    return Object.entries(params).map((e) => `${e[0]}=${e[1]}`).join('&')
 }
 
 //dealing with when meeting deleted.
@@ -68,8 +62,9 @@ function clearAllMeetingAlarm() {
 function getToken() {
     return new Promise((resolve, reject) => {
         console.log('auth start!')
-        let authURL = 'https://accounts.google.com/o/oauth2/v2/auth';
         const redirectURL = chrome.identity.getRedirectURL("oauth2");
+
+        let authURL = 'https://accounts.google.com/o/oauth2/v2/auth';
         let auth_params = {
             client_id: client_id,
             // redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
@@ -78,11 +73,7 @@ function getToken() {
             access_type: 'offline',
             scope: scope,
         };
-        auth_params = '?' + Object.entries(auth_params).map((e) => `${e[0]}=${e[1]}`).join('&');
-        chrome.identity.launchWebAuthFlow({ url: authURL + auth_params, interactive: true }, (responseURL) => {
-            console.log(responseURL);
-            // ログイン許可を出すと画面に認証コードが出るのでそれを入力させる
-            // let code = prompt("please input authorization code");
+        chrome.identity.launchWebAuthFlow({ url: authURL + '?' + paramsToQueryString(auth_params), interactive: true }, (responseURL) => {
             let code = new URL(responseURL).searchParams.get("code");
             let params = {
                 "client_id": client_id,
@@ -92,6 +83,7 @@ function getToken() {
                 "redirect_uri": redirectURL,
                 // "redirect_uri": "urn:ietf:wg:oauth:2.0:oob"
             };
+            console.log(paramsToQueryString(params));
             // 入力した認証コードを使用してアクセストークンを取得
             fetch("https://www.googleapis.com/oauth2/v3/token", {
                 method: "POST",
